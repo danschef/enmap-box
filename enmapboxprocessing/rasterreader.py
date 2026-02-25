@@ -1,6 +1,7 @@
-from math import isnan, ceil, nan
+import json
+from math import isnan, ceil
 from os.path import exists
-from typing import Iterable, List, Union, Optional, Tuple, Iterator
+from typing import Iterable, List, Union, Optional, Tuple, Iterator, Dict
 
 import numpy as np
 import processing
@@ -80,11 +81,14 @@ class RasterReader(object):
         else:
             self.terraMetadata = None
 
+        # prepare metadata cache
+        self.metadataCache = metadataCache(self.layer)
+
     def setExternalMask(self, layer: QgsRasterLayer):
         self.maskReader = RasterReader(layer)
 
     def bandCount(self) -> int:
-        """Return iterator over all band numbers."""
+        """Return band count."""
         return self.provider.bandCount()
 
     def bandNumbers(self) -> Iterator[int]:
@@ -649,22 +653,6 @@ class RasterReader(object):
 
         return None
 
-    def _setCachedWavelength(self, nanometers: float, bandNo: int):
-        key = 'EnMAP-Box/cache'
-        cache = self.layer.customProperty(key)
-        if cache is None:
-            cache = {'wavelength': {}}
-        cache['wavelength'][bandNo] = nanometers
-        self.layer.setCustomProperty(key, cache)
-
-    def _cachedWavelength(self, bandNo: int) -> Optional[float]:
-        key = 'EnMAP-Box/cache'
-        cache = self.layer.customProperty(key)
-        if cache is None:
-            return None
-
-        return cache['wavelength'].get(bandNo)
-
     def wavelength(self, bandNo: int, units: str = None, raw=False) -> Optional[float]:
         """Return band center wavelength in nanometers. Optionally, specify destination units."""
 
@@ -672,9 +660,9 @@ class RasterReader(object):
             units = self.Nanometers
 
         # check cache
-        wavelength = self._cachedWavelength(bandNo)
-        if wavelength is not None:
-            if isnan(wavelength):
+        if self.metadataCache is not None:
+            wavelength = self.metadataCache['wavelength'][bandNo - 1]
+            if wavelength is None:
                 return None
             conversionFactor = Utils.wavelengthUnitsConversionFactor('nm', units)
             return conversionFactor * wavelength
@@ -683,42 +671,30 @@ class RasterReader(object):
         enviDescription = self.metadataItem('description', 'ENVI')
         if enviDescription is not None:
             if enviDescription[0].startswith('FORCE') and enviDescription[0].endswith('Time Series Analysis'):
-                if not raw:
-                    self._setCachedWavelength(nan, bandNo)
                 return None
 
         if raw:
             conversionFactor = 1.
-            conversionFactorToNanometers = None
         else:
             wavelength_units = self.wavelengthUnits(bandNo)
             if wavelength_units is None:
-                if not raw:
-                    self._setCachedWavelength(nan, bandNo)
                 return None
 
             conversionFactor = Utils.wavelengthUnitsConversionFactor(wavelength_units, units)
-            conversionFactorToNanometers = Utils.wavelengthUnitsConversionFactor(wavelength_units, self.Nanometers)
 
         if not self.disableStac:
             # check STAC
             wavelength = self.stacMetadata['properties']['eo:bands'][bandNo - 1].get('center_wavelength')
             if wavelength is not None:
-                if not raw:
-                    self._setCachedWavelength(conversionFactorToNanometers * float(wavelength), bandNo)
                 return conversionFactor * float(wavelength)
 
             wavelength = self.stacMetadata['properties']['envi:metadata'].get('wavelength')
             if wavelength is not None:
-                if not raw:
-                    self._setCachedWavelength(conversionFactorToNanometers * float(wavelength[bandNo - 1]), bandNo)
                 return conversionFactor * float(wavelength[bandNo - 1])
 
         # check GDAL
         wavelength = self.metadataItem('CENTRAL_WAVELENGTH_UM', 'IMAGERY', bandNo)
         if wavelength is not None:
-            if not raw:
-                self._setCachedWavelength(conversionFactorToNanometers * float(wavelength), bandNo)
             return conversionFactor * float(wavelength)
 
         for key in [
@@ -731,7 +707,8 @@ class RasterReader(object):
                 wavelength = self.metadataItem(key, domain, bandNo)
                 if wavelength is not None:
                     if not raw:
-                        self._setCachedWavelength(conversionFactorToNanometers * float(wavelength), bandNo)
+                        if isinstance(wavelength, list):
+                            return
                     return conversionFactor * float(wavelength)
 
             # check dataset-level domains
@@ -739,12 +716,8 @@ class RasterReader(object):
                 wavelengths = self.metadataItem(key, domain)
                 if wavelengths is not None:
                     wavelength = wavelengths[bandNo - 1]
-                    if not raw:
-                        self._setCachedWavelength(conversionFactorToNanometers * float(wavelength), bandNo)
                     return conversionFactor * float(wavelength)
 
-        if not raw:
-            self._setCachedWavelength(nan, bandNo)
         return None
 
     def findWavelength(self, wavelength: Optional[float], units: str = None) -> Optional[int]:
@@ -1016,7 +989,7 @@ class RasterReader(object):
         return self.width() * nBands * dataTypeSize
 
     def _gdalObject(self, bandNo: int = None) -> Union[gdal.Band, gdal.Dataset]:
-        if bandNo is None:
+        if bandNo is None or bandNo > self.gdalDataset.RasterCount:  # handle case where GDAL band count != QGIS band count
             gdalObject = self.gdalDataset
         else:
             gdalObject = self.gdalDataset.GetRasterBand(bandNo)
@@ -1051,3 +1024,26 @@ class RasterReader(object):
             outraster = QgsRasterLayer(filename)
             outraster.setRenderer(renderer)
             outraster.saveDefaultStyle(QgsMapLayer.StyleCategory.AllStyleCategories)
+
+
+CACHE_KEY = 'EnMAP-Box/cache'
+
+
+def setMetadataCache(layer: QgsRasterLayer, cache: Dict = None):
+    layer.setCustomProperty(CACHE_KEY, json.dumps(cache))
+
+
+def metadataCache(layer) -> Optional[Dict]:
+    cacheJson = layer.customProperty(CACHE_KEY)
+    if cacheJson is None:
+        return None
+    cacheDict = json.loads(cacheJson)
+    return cacheDict
+
+
+def buildMetadataCache(layer) -> Dict:
+    reader = RasterReader(layer)
+    cache = {
+        'wavelength': [reader.wavelength(bandNo) for bandNo in reader.bandNumbers()]
+    }
+    return cache

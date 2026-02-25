@@ -19,44 +19,40 @@ BRANCH_NAME_LOOKUP = {
     'latest': ''
 }
 
+# QGIS conda versions that are known to have problems
+# e.g., https://github.com/conda-forge/qgis-feedstock/issues/570
+EXCLUDED_QGIS_VERSIONS = []
+
 # define packages to be installed in the different *.yml files
 # compare with .env/requirements.csv
 # only define root packages, the
 DEPENDENCIES = {
     # define dependencies as: [<conda package name> | {<'conda'|'pip'>:<package name>, ...}, ...]
     # light = minimum requirements
-    'light': ['python>=3.10', 'pip', 'scikit-learn>=1', 'matplotlib', 'enpt', 'colorama'],
+    'light': ['python=3.12', 'pip', 'scikit-learn>=1', 'matplotlib', 'colorama'],
     # full = all other packages to enjoy the full EnMAP-Box experience (on cost of disk space)
-    'full': [{'conda': 'enpt', 'pip': 'enpt-enmapboxapp'}, 'xgboost', 'lightgbm', 'cdsapi', 'cython', 'netcdf4',
+    'full': [{'conda': 'enpt', 'pip': 'enpt-enmapboxapp'},
+             {'conda': 'enfrosp', 'pip': 'enfrosp-enmapboxapp'},
+             'xgboost', 'lightgbm', 'cdsapi', 'cython', 'netcdf4',
              'pygrib',
              'pyhdf', 'xarray', 'astropy', 'catboost', 'matplotlib', 'astropy', 'numba>=0.56.4',
              'sympy', 'pyopengl', 'h5py',
              # requirements by specdeepmap
              'opencv[build=headless*]', 'pandas=2.2.3',
-             {'pip': ['torch==2.6.0',
-                      'lightning==2.5.0.post0',
-                      'tensorboard==2.19.0',
-                      'torchvision==0.21.0',
-                      'segmentation-models-pytorch==0.5.0']}
+             # requirements by specdeepmap
+             'lightning', 'pytorch', 'tensorboard', 'torchvision', 'segmentation-models-pytorch',
+             'setuptools<=81',  # due to https://github.com/tensorflow/tensorboard/issues/7003
+             # {'pip': ['torch==2.6.0',
+             #         'lightning==2.5.0.post0',
+             #         'tensorboard==2.19.0',
+             #         'torchvision==0.21.0',
+             #         'segmentation-models-pytorch==0.5.0']}
              ],
     # required by developers
     'dev': ['gitpython', 'git-lfs', 'pytest', 'pytest-cov', 'pytest-xdist', 'docutils',
             {'conda': 'flake8', 'pip': 'flake8-qgis'},
             ]
 }
-
-"""
-  opencv[build=headless*]
-  - pip:
-      - flake8-qgis
-      - torch==2.6.0
-      - lightning==2.5.0.post0
-      - tensorboard==2.19.0
-      - torchvision==0.21.0
-      - segmentation-models-pytorch==0.5.0
-      - pandas==2.2.3
-
-"""
 
 
 def restructure_dependencies(d: dict) -> Dict[str, List[Dict[str, List[str]]]]:
@@ -105,7 +101,7 @@ def get_current_qgis_versions() -> dict:
     return VERSIONS
 
 
-def get_conda_qgis_versions() -> dict:
+def get_conda_qgis_versions() -> List[str]:
     path_repodata = DIR_TMP / f'condaforge-repodata-{str(datetime.date.today())}.json'
 
     if not path_repodata.is_file():
@@ -130,6 +126,7 @@ def get_conda_qgis_versions() -> dict:
     qgis_builds += [v for k, v in repodata['packages'].items() if rxPkg.match(k)]
     qgis_builds += [v for k, v in repodata['packages.conda'].items() if rxPkg.match(k)]
     qgis_versions = sorted(set([build['version'] for build in qgis_builds]))
+
     return qgis_versions
 
 
@@ -176,11 +173,13 @@ def update_yaml(dir_yaml,
     deps_conda = sorted(set(deps_conda))
     deps_pip = sorted(set(deps_pip))
 
-    if ltr_version:
-        deps_conda.insert(0, f'qgis={ltr_version}')
-    else:
-        deps_conda.insert(0, 'qgis')
+    qgis_version = f'qgis={ltr_version}' if ltr_version else 'qgis'
+    for v in EXCLUDED_QGIS_VERSIONS:
+        if re.search(r'\d+$', qgis_version) and not v.startswith(','):
+            qgis_version += ','
+        qgis_version += v
 
+    deps_conda.insert(0, qgis_version)
     environment = {
         'name': name,
         'channels': ['conda-forge'],

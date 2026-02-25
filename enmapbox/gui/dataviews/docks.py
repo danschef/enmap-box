@@ -820,13 +820,15 @@ class SpectralLibraryDock(Dock):
         # speclib.nameChanged.connect(lambda slib=speclib: self.setTitle(slib.name()))
         # self.sigTitleChanged.connect(speclib.setName)
         self.mDefaultSpeclibId: str = ''
+        if isinstance(speclib, QgsVectorLayer):
+            self.mDefaultSpeclibId = speclib.id()
 
     def createDefaultSpeclib(self) -> QgsVectorLayer:
         """
         Creates an in-memory spectral library whose layer name is linked to the dock's name
         """
         sl = SpectralLibraryUtils.createSpectralLibrary(['profiles'])
-        sl.setName(f'{self.name()}')
+        sl.setName(f'{self.title()}')
         with edit(sl):
             sl.addAttribute(QgsField('name', QMetaType.QString))
         self.speclibWidget().project().addMapLayer(sl)
@@ -847,10 +849,8 @@ class SpectralLibraryDock(Dock):
                 # change the dock title
                 sid = s.id()
                 title = s.name()
-                for dock in self.docks(SpectralLibraryDock):
-                    assert isinstance(dock, SpectralLibraryDock)
-                    if dock.mDefaultSpeclibId == sid and dock.title() != title:
-                        dock.setTitle(title)
+                if self.mDefaultSpeclibId == sid and self.title() != title:
+                    self.setTitle(title)
 
         self.sigTitleChanged.connect(updateName)
         sl.nameChanged.connect(updateName)
