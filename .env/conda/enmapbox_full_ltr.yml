@@ -11,9 +11,7 @@ dependencies:
 - qgis=3.40
 - astropy
 - catboost
-- cdsapi
 - colorama
-- cython
 - docutils
 - enfrosp
 - enpt
@@ -29,8 +27,6 @@ dependencies:
 - opencv[build=headless*]
 - pandas=2.2.3
 - pip
-- pygrib
-- pyhdf
 - pyopengl
 - pytest
 - pytest-cov
@@ -43,7 +39,6 @@ dependencies:
 - sympy
 - tensorboard
 - torchvision
-- xarray
 - xgboost
 - pip:
   - enfrosp-enmapboxapp

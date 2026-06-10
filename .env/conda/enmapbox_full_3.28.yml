@@ -14,13 +14,8 @@ dependencies:
   - lightgbm
 
   # Polymer AC additional conda requirements
-  - cdsapi
-  - cython
   - gdal
   - netcdf4
-  - pygrib
-  - pyhdf
-  - xarray
 
   # EnMAP-Box
   - astropy

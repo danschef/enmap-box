@@ -33,9 +33,8 @@ DEPENDENCIES = {
     # full = all other packages to enjoy the full EnMAP-Box experience (on cost of disk space)
     'full': [{'conda': 'enpt', 'pip': 'enpt-enmapboxapp'},
              {'conda': 'enfrosp', 'pip': 'enfrosp-enmapboxapp'},
-             'xgboost', 'lightgbm', 'cdsapi', 'cython', 'netcdf4',
-             'pygrib',
-             'pyhdf', 'xarray', 'astropy', 'catboost', 'matplotlib', 'astropy', 'numba>=0.56.4',
+             'xgboost', 'lightgbm', 'netcdf4',
+             'astropy', 'catboost', 'matplotlib', 'astropy', 'numba>=0.56.4',
              'sympy', 'pyopengl', 'h5py',
              # requirements by specdeepmap
              'opencv[build=headless*]', 'pandas=2.2.3',
