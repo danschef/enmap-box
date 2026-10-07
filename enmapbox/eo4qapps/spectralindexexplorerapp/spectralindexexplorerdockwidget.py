@@ -1,14 +1,19 @@
 import traceback
+from contextlib import suppress
+
+from qgis.PyQt import uic
+from qgis.PyQt.QtGui import QPalette
+from qgis.PyQt.QtWidgets import QApplication
+from qgis.PyQt.QtWidgets import QTableWidget, QComboBox, QLineEdit, QCheckBox, QTableWidgetItem, QLabel, QToolButton
+from qgis.core import QgsMapLayerProxyModel, QgsProcessingContext, QgsProject
+from qgis.gui import (
+    QgsMapLayerComboBox, QgsCheckableComboBox, QgsRasterBandComboBox, QgsFilterLineEdit, QgsDockWidget, QgisInterface,
+    QgsMessageBar
+)
 
 from enmapbox.gui.enmapboxgui import EnMAPBox
 from enmapbox.typeguard import typechecked
 from enmapboxprocessing.rasterreader import RasterReader
-from qgis.PyQt import uic
-from qgis.PyQt.QtGui import QColor
-from qgis.PyQt.QtWidgets import QTableWidget, QComboBox, QLineEdit, QCheckBox, QTableWidgetItem, QLabel, QToolButton
-from qgis.core import QgsMapLayerProxyModel, QgsProcessingContext, QgsProject
-from qgis.gui import QgsMapLayerComboBox, QgsCheckableComboBox, QgsRasterBandComboBox, QgsFilterLineEdit, QgsDockWidget, \
-    QgisInterface, QgsMessageBar
 
 
 @typechecked
@@ -69,14 +74,17 @@ class SpectralIndexExplorerDockWidget(QgsDockWidget):
             raise ValueError()
 
     def setRowDisabled(self, row: int, disable: bool):
-        if disable:
-            italic = True
-            color = QColor('gray')
-        else:
-            italic = False
-            color = QColor('black')
 
         item = self.mTableIndices.verticalHeaderItem(row)
+        color = QApplication.palette().color(QPalette.Text)
+
+        if disable:
+            italic = True
+            color.setAlpha(100)
+        else:
+            italic = False
+            color.setAlpha(255)
+
         font = item.font()
         font.setItalic(italic)
         item.setFont(font)
@@ -271,12 +279,10 @@ class SpectralIndexExplorerDockWidget(QgsDockWidget):
         for row in range(self.mTableConstants.rowCount()):
             name = self.mTableConstants.verticalHeaderItem(row).text()
             value = self.mTableConstants.item(row, 0).text()
-            try:
+            with suppress(Exception):
                 value = float(value)
                 mapping.append(name)
                 mapping.append(value)
-            except Exception:
-                pass
 
         alg = SpectralIndexLayerAlgorithm()
         parameters = {
