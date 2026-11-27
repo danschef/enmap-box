@@ -1,52 +1,56 @@
-name: 🧪 EnMAP-Box Tests
+name: 🧪 Tests (Docker)
 
 on:
   push:
     branches:
-      - main
+      - main**
       - release-**
       - release_**
 
   pull_request:
     branches:
-      - main
+      - main**
       - release-**
       - release_**
 
   release:
     types: [ published ]
 
+  workflow_dispatch:
+
 jobs:
   # Run EnMAP-Box tests
   test:
-    runs-on: ubuntu-22.04
+    name: QGIS ${{ matrix.qgis_version }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        qgis_version: [ '3.44', '3.42', '3.40' ]
-      fail-fast: true
+        qgis_version: [ '4.2', '4.4' ]
+      fail-fast: false
 
     env:
-      QGIS_TEST_VERSION: ${{ matrix.qgis_version}}
+      QGIS_VERSION: ${{ matrix.qgis_version}}
+    
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 1
 
       - name: Docker Environment Info
         run: |
-          # ls -la .docker/
-          # ls -la
-          # ls -la ~
-          # ls -la /usr/bin
           docker --version
           lsb_release -a
-      - name: Python Packages Info
+
+      - name: Setup Repository
         run: |
-          python3 --version
-          pip list
+          chmod +x .env/docker/docker-python.sh
+          .env/docker/docker-python.sh scripts/setup_repository.py
+
       - name: Test EnMAP-Box on QGIS
         run: |
-          chmod +x .env/docker/run_docker_tests.sh
-          ls -la .env/docker
-          docker compose -f .env/docker/docker-compose.gh.yml run qgis /usr/src/.env/docker/run_docker_tests.sh -n auto
+          chmod +x scripts/runtests_docker.sh
+          ./scripts/runtests_docker.sh -n auto --cov=enmapbox --cov-report=xml
+        env:
+          QGIS_VERSION: ${{ matrix.qgis_version }}

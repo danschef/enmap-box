@@ -2,6 +2,15 @@
 
 ![Logo](enmapbox/gui/ui/icons/enmapbox.svg)
 
+[![Code Checks](https://github.com/EnMAP-Box/enmap-box/actions/workflows/code_check.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/code_check.yml)
+[![EnMAP-Box Tests](https://github.com/EnMAP-Box/enmap-box/actions/workflows/run-tests.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/run-tests.yml)
+[![Conda Environments](https://github.com/EnMAP-Box/enmap-box/actions/workflows/run-tests-conda.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/run-tests-conda.yml)
+
+# [![Test All Environments](https://github.com/EnMAP-Box/enmap-box/actions/workflows/test-all-environments.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/test-all-environments.yml)
+
+[![URL Check](https://github.com/EnMAP-Box/enmap-box/actions/workflows/urlcheck.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/urlcheck.yml)
+[![Dependency Updates](https://github.com/EnMAP-Box/enmap-box/actions/workflows/dependency-updates.yml/badge.svg)](https://github.com/EnMAP-Box/enmap-box/actions/workflows/dependency-updates.yml)
+
 The EnMAP-Box is free and open source [QGIS Plugin ](https://www.qgis.org) to visualize and process remote sensing
 raster data.
 It is particularly developed to handle imaging spectroscopy data, as from the upcoming EnMAP sensor.
@@ -334,7 +343,22 @@ the folder containing the sensor products. This will allow you to run additional
 export ENMAPBOX_SENSOR_PRODUCT_ROOT=~/MyMountedDrives/EnmapBoxExternalSensorProducts
 ````
 
-To test with docker, run:
+## Docker
+
+To test with docker with [`qgis/qgis:latest`](https://hub.docker.com/layers/qgis/qgis/latest), run:
+
+````bash
+./scripts/runtests_docker.sh -n auto
+````
+
+To run the tests with another qgis/qgis tag, e.g. [
+`qgis/qgis:nightly`](https://hub.docker.com/layers/qgis/qgis/nightly/), call:
+
+````bash
+QGIS_VERSION="nightly" ./scripts/runtests_docker.sh -n auto
+````
+
+More in detail:
 
 ````bash
 QGIS_TEST_VERSION=3.44 docker compose \
@@ -347,6 +371,27 @@ QGIS_TEST_VERSION=3.44 docker compose \
 * `--build` forces a rebuild of the container
 * `--user` sets the user id and group id of the container to the current user
 * `-n auto` runs the tests in parallel (using pytest xdist)`
+
+## Local QGIS compilation (Linux)
+
+With a customized QGIS installation, you can run the tests against it by setting the following environmental
+variables:
+
+````bash
+QGIS_PREFIX_PATH=~/repositories/QGIS/build/output
+PYTHONPATH=~/repositories/QGIS/build/output/python:/home/jakimowb/repositories/QGIS/build/output/python/plugins
+# Linux/macOS:
+LD_LIBRARY_PATH=~/repositories/QGIS/build/output/lib
+````
+
+You may store them in a `qgis-local.env` file and call the tests like in:
+
+````bash
+set -a
+source qgis-local.env
+set +a
+./scripts/runtests.sh -n auto
+````
 
 # License
 

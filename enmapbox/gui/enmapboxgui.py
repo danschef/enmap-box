@@ -17,50 +17,16 @@
 ***************************************************************************
 """
 import os
-import pathlib
 import re
 import sys
 import warnings
 from os.path import basename, dirname
+from pathlib import Path
 from typing import Optional, Dict, Union, Any, List, Sequence
 
-import enmapbox
-import enmapbox.gui.datasources.manager
-import qgis.utils
-from enmapbox import messageLog, debugLog, DEBUG
-from enmapbox.algorithmprovider import EnMAPBoxProcessingProvider
-from enmapbox.gui.dataviews.dockmanager import DockManagerTreeModel, MapDockTreeNode
-from enmapbox.gui.dataviews.docks import SpectralLibraryDock, Dock, AttributeTableDock, MapDock
-from enmapbox.qgispluginsupport.qps.cursorlocationvalue import CursorLocationInfoDock
-from enmapbox.qgispluginsupport.qps.layerproperties import showLayerPropertiesDialog
-from enmapbox.qgispluginsupport.qps.maptools import QgsMapToolSelectionHandler, MapTools
-from enmapbox.qgispluginsupport.qps.speclib.core import is_spectral_library
-from enmapbox.qgispluginsupport.qps.speclib.gui.spectrallibrarywidget import SpectralLibraryWidget
-from enmapbox.qgispluginsupport.qps.speclib.gui.spectralprofilesources import SpectralProfileSourcePanel, \
-    MapCanvasLayerProfileSource, SpectralFeatureGeneratorNode, SpectralProfileBridge, StandardLayerProfileSource, \
-    ProfileSamplingMode, SpectralProfileGeneratorNode
-from enmapbox.qgispluginsupport.qps.subdatasets import SubDatasetSelectionDialog
-from enmapbox.qgispluginsupport.qps.utils import SpatialPoint, loadUi, SpatialExtent, file_search
-from enmapbox.typeguard import typechecked
-from enmapboxprocessing.algorithm.importdesisl1balgorithm import ImportDesisL1BAlgorithm
-from enmapboxprocessing.algorithm.importdesisl1calgorithm import ImportDesisL1CAlgorithm
-from enmapboxprocessing.algorithm.importdesisl2aalgorithm import ImportDesisL2AAlgorithm
-from enmapboxprocessing.algorithm.importemitl2aalgorithm import ImportEmitL2AAlgorithm
-from enmapboxprocessing.algorithm.importenmapl1balgorithm import ImportEnmapL1BAlgorithm
-from enmapboxprocessing.algorithm.importenmapl1calgorithm import ImportEnmapL1CAlgorithm
-from enmapboxprocessing.algorithm.importenmapl2aalgorithm import ImportEnmapL2AAlgorithm
-from enmapboxprocessing.algorithm.importlandsatl2algorithm import ImportLandsatL2Algorithm
-from enmapboxprocessing.algorithm.importplanetscopealgorithm import ImportPlanetScopeAlgorithm
-from enmapboxprocessing.algorithm.importprismal1algorithm import ImportPrismaL1Algorithm
-from enmapboxprocessing.algorithm.importprismal2balgorithm import ImportPrismaL2BAlgorithm
-from enmapboxprocessing.algorithm.importprismal2calgorithm import ImportPrismaL2CAlgorithm
-from enmapboxprocessing.algorithm.importprismal2dalgorithm import ImportPrismaL2DAlgorithm
-from enmapboxprocessing.algorithm.importsentinel2l2aalgorithm import ImportSentinel2L2AAlgorithm
-from enmapboxprocessing.enmapalgorithm import EnMAPProcessingAlgorithm
-from processing.gui.ProcessingToolbox import ProcessingToolbox
 from qgis.PyQt.QtCore import QMetaType
 from qgis.PyQt.QtCore import QUrl
-from qgis.PyQt.QtCore import pyqtSignal, Qt, QObject, QModelIndex, pyqtSlot, QEventLoop, QRect, QSize, QFile
+from qgis.PyQt.QtCore import pyqtSignal, Qt, QModelIndex, pyqtSlot, QEventLoop, QRect, QSize, QFile
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtGui import QDragEnterEvent, QDragMoveEvent, QDragLeaveEvent, QDropEvent, QColor, QIcon, \
     QKeyEvent, \
@@ -69,31 +35,72 @@ from qgis.PyQt.QtWidgets import QFrame, QToolBar, QToolButton, QAction, QMenu, Q
     QWidget, QDockWidget, QStyle, QFileDialog, QDialog, QStatusBar, \
     QProgressBar, QMessageBox
 from qgis.PyQt.QtXml import QDomDocument
-from qgis.core import QgsBrowserModel, QgsField
-from qgis.core import QgsExpressionContextGenerator, QgsExpressionContext, QgsProcessingContext, \
-    QgsExpressionContextUtils
-from qgis.core import QgsFeature
-from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer, QgsProject, \
-    QgsProcessingAlgorithm, Qgis, QgsCoordinateReferenceSystem, QgsWkbTypes, \
-    QgsPointXY, QgsLayerTree, QgsLayerTreeLayer, QgsVectorLayerTools, \
-    QgsZipUtils, QgsProjectArchive, QgsSettings, \
-    QgsStyle, QgsSymbolLegendNode, QgsSymbol, QgsTaskManager, QgsApplication, QgsProcessingAlgRunnerTask
-from qgis.core import QgsRectangle, edit
-from qgis.gui import QgsMapCanvas, QgsMapTool, QgisInterface, QgsMessageBar, QgsMessageViewer, QgsMessageBarItem, \
-    QgsMapLayerConfigWidgetFactory, QgsAttributeTableFilterModel, QgsSymbolSelectorDialog, \
-    QgsSymbolWidgetContext
-from qgis.gui import QgsProcessingAlgorithmDialogBase, QgsNewGeoPackageLayerDialog, QgsNewMemoryLayerDialog, \
-    QgsNewVectorLayerDialog, QgsProcessingContextGenerator
+from qgis.core import (
+    QgsBrowserModel, QgsField, QgsExpressionContextGenerator, QgsExpressionContext,
+    QgsProcessingContext,
+    QgsExpressionContextUtils, QgsFeature, QgsProcessingException, QgsMapLayer, QgsVectorLayer, QgsRasterLayer,
+    QgsProject,
+    QgsProcessingAlgorithm, Qgis, QgsCoordinateReferenceSystem, QgsWkbTypes,
+    QgsPointXY, QgsLayerTree, QgsLayerTreeLayer, QgsVectorLayerTools,
+    QgsZipUtils, QgsProjectArchive, QgsSettings,
+    QgsStyle, QgsSymbolLegendNode, QgsSymbol, QgsTaskManager, QgsApplication,
+    QgsProcessingAlgRunnerTask, QgsRectangle, edit
+)
+from qgis.core import QgsProviderSublayerDetails
+from qgis.gui import (
+    QgsMapCanvas, QgsMapTool, QgisInterface, QgsMessageBar, QgsMessageViewer, QgsMessageBarItem,
+    QgsMapLayerConfigWidgetFactory, QgsAttributeTableFilterModel, QgsSymbolSelectorDialog,
+    QgsSymbolWidgetContext, QgsProcessingAlgorithmWidgetBase, QgsNewGeoPackageLayerDialog, QgsNewMemoryLayerDialog,
+    QgsNewVectorLayerDialog, QgsProcessingContextGenerator, QgsProcessingParameterWidgetContext
+)
+
+import enmapbox
+import enmapbox.gui.datasources.manager
+from enmapbox import messageLog, debugLog, DEBUG
+from enmapbox.algorithmprovider import EnMAPBoxProcessingProvider
+from enmapbox.gui.dataviews.dockmanager import DockManagerTreeModel, MapDockTreeNode, DockTypes
+from enmapbox.gui.dataviews.docks import Dock
+from enmapbox.qgispluginsupport.qps.cursorlocationvalue import CursorLocationInfoDock
+from enmapbox.qgispluginsupport.qps.layerproperties import showLayerPropertiesDialog
+from enmapbox.qgispluginsupport.qps.maptools import QgsMapToolSelectionHandler, MapTools
+from enmapbox.qgispluginsupport.qps.reimplementation.processingtoolboxdockwidget import ProcessingToolboxDockWidget
+from enmapbox.qgispluginsupport.qps.speclib.core import is_spectral_library
+from enmapbox.qgispluginsupport.qps.speclib.gui.spectrallibrarywidget import SpectralLibraryWidget
+from enmapbox.qgispluginsupport.qps.speclib.gui.spectralprofilesources import SpectralProfileSourcePanel, \
+    MapCanvasLayerProfileSource, SpectralFeatureGeneratorNode, SpectralProfileBridge, StandardLayerProfileSource, \
+    ProfileSamplingMode, SpectralProfileGeneratorNode
+from enmapbox.qgispluginsupport.qps.subdatasets import SubDatasetSelectionDialog
+from enmapbox.qgispluginsupport.qps.utils import SpatialPoint, loadUi, SpatialExtent, file_search
+from enmapboxprocessing.algorithm.importdesisl1balgorithm import ImportDesisL1BAlgorithm
+from enmapboxprocessing.algorithm.importdesisl1calgorithm import ImportDesisL1CAlgorithm
+from enmapboxprocessing.algorithm.importdesisl2aalgorithm import ImportDesisL2AAlgorithm
+from enmapboxprocessing.algorithm.importemitl2aalgorithm import ImportEmitL2AAlgorithm
+from enmapboxprocessing.algorithm.importenmapl1balgorithm import ImportEnmapL1BAlgorithm
+from enmapboxprocessing.algorithm.importenmapl1calgorithm import ImportEnmapL1CAlgorithm
+from enmapboxprocessing.algorithm.importenmapl2aalgorithm import ImportEnmapL2AAlgorithm
+from enmapboxprocessing.algorithm.importiperlitel1calgorithm import ImportIperliteL1CAlgorithm
+from enmapboxprocessing.algorithm.importlandsatl2algorithm import ImportLandsatL2Algorithm
+from enmapboxprocessing.algorithm.importplanetscopealgorithm import ImportPlanetScopeAlgorithm
+from enmapboxprocessing.algorithm.importprismal1algorithm import ImportPrismaL1Algorithm
+from enmapboxprocessing.algorithm.importprismal2balgorithm import ImportPrismaL2BAlgorithm
+from enmapboxprocessing.algorithm.importprismal2calgorithm import ImportPrismaL2CAlgorithm
+from enmapboxprocessing.algorithm.importprismal2dalgorithm import ImportPrismaL2DAlgorithm
+from enmapboxprocessing.algorithm.importsentinel2l2aalgorithm import ImportSentinel2L2AAlgorithm
+from enmapboxprocessing.enmapalgorithm import EnMAPProcessingAlgorithm
 from .contextmenuprovider import EnMAPBoxContextMenuProvider
 from .contextmenus import EnMAPBoxContextMenuRegistry
 from .datasources.datasources import DataSource, RasterDataSource, VectorDataSource, SpatialDataSource
-from .dataviews.docks import DockTypes
+from .dataviews.attributetabledock import AttributeTableDock
+from .dataviews.mapdock import MapDock
+from .dataviews.spectrallibrarydock import SpectralLibraryDock
+from .enmapboxsettingsgui import EnMAPBoxSettingsPageWidget
 from .mapcanvas import MapCanvas
 from .splashscreen.splashscreen import EnMAPBoxSplashScreen
 from .utils import enmapboxUiPath, high_contrast_random_color
 from .widgets.createspeclibdialog import CreateSpectralLibraryDialog
+from ..enmapboxproject import EnMAPBoxProject
 from ..enmapboxsettings import EnMAPBoxSettings
-from ..qgispluginsupport.qps.processing.algorithmdialog import executeAlgorithm, AlgorithmDialog
+from ..qgispluginsupport.qps.reimplementation.algorithmwidget import AlgorithmWidget
 from ..qgispluginsupport.qps.speclib.core import profile_fields
 from ..qgispluginsupport.qps.speclib.core.spectrallibrary import SpectralLibraryUtils
 from ..qgispluginsupport.qps.speclib.core.spectralprofile import ProfileEncoding
@@ -146,7 +153,8 @@ class EnMAPBoxUI(QMainWindow):
     menuApplicationsClassification: QMenu
     menuApplicationsRegression: QMenu
     menuApplicationsUnmixing: QMenu
-
+    menuSettings: QMenu
+    mActionShowOptions: QAction
     menuAbout: QMenu
 
     def __init__(self, *args, **kwds):
@@ -229,19 +237,6 @@ class EnMAPBoxUI(QMainWindow):
         )
 
 
-#        self.menuAdd_Product.addMenu(self.menuToolsRasterVisualizations)
-# separator = self.ui.mActionAddSentinel2  # outdated
-
-def getIcon() -> QIcon:
-    """
-    Returns the EnMAP icon
-    :return: QIcon
-    """
-    warnings.warn(DeprecationWarning('Use enmapbox.icon() instead to return the EnMAP-Box icon'), stacklevel=2)
-    return enmapbox.icon()
-
-
-@typechecked
 class EnMAPBoxMapCanvasRenderProgressBar(QProgressBar):
 
     def __init__(self, parent=None):
@@ -312,70 +307,7 @@ class EnMAPBoxLayerTreeLayer(QgsLayerTreeLayer):
         self.updateLayerTitle()
 
 
-class EnMAPBoxProject(QgsProject):
-
-    def __init__(self, *args, **kwds):
-        super().__init__(*args, **kwds)
-        self.setTitle('EnMAP-Box')
-        self.mLayerRefs: list[QgsMapLayer] = []
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__}: "{self.title()}">'
-
-    def removeAllMapLayers(self):
-        self.mLayerRefs.clear()
-        super().removeAllMapLayers()
-        self.mLayerRefs.clear()
-
-    def addMapLayer(self, mapLayer: QgsMapLayer, *args, **kwds) -> QgsMapLayer:
-        # self.debugPrint('addMapLayer')
-        lyr = super().addMapLayer(mapLayer, *args, **kwds)
-        if isinstance(lyr, QgsMapLayer) and lyr not in self.mLayerRefs:
-            self.mLayerRefs.append(lyr)
-        return lyr
-
-    def addMapLayers(self, mapLayers: QgsMapLayer, *args, **kwargs):
-        # self.debugPrint(f'addMapLayers {mapLayers}')
-        added_layers = super().addMapLayers(mapLayers)
-        for lyr in added_layers:
-            if lyr not in self.mLayerRefs:
-                self.mLayerRefs.append(lyr)
-        return added_layers
-
-    def removeMapLayers(self, layers):
-        # self.debugPrint(f'removeMapLayers {layers}')
-        result = super().removeMapLayers(layers)
-
-        for lyr in layers:
-            if isinstance(lyr, str):
-                lyr = self.mapLayer(lyr)
-            if lyr in self.mLayerRefs:
-                self.mLayerRefs.remove(lyr)
-        # self.debugPrint('removeMapLayers')
-        return result
-
-    def takeMapLayer(self, layer: QgsMapLayer) -> QgsMapLayer:
-        if layer in self.mLayerRefs:
-            self.mLayerRefs.remove(layer)
-        return super().takeMapLayer(layer)
-
-    def debugPrint(self, msg: str = ''):
-
-        keysE = list(self.mapLayers().keys())
-        if len(keysE) != len(self.mLayerRefs):
-            print('Warning: differing layer refs')
-        keysQ = list(QgsProject.instance().mapLayers().keys())
-
-        rows = [['EnMAPBox', 'QGIS', 'Layer ID']]
-        for k in sorted(set(keysE + keysQ)):
-            rows.append([str(k in keysE), str(k in keysQ), k])
-        info = '\n'.join(['{:<8}\t{:<4}\t{}'.format(*row) for row in rows])
-        if len(rows) == 1:
-            info += '\t - no map layers -'
-        print(info, flush=True)
-
-
-class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcessingContextGenerator):
+class EnMAPBox(QgisInterface):
     _instance = None
 
     @staticmethod
@@ -415,27 +347,76 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
     sigDockAdded = pyqtSignal(Dock)
 
+    class ContextGenerator(QgsProcessingContextGenerator, QgsExpressionContextGenerator):
+
+        def __init__(self, enmapbox):
+            super().__init__()
+            self._enmapbox = enmapbox
+
+        def processingContext(self) -> QgsProcessingContext:
+            processingContext = QgsProcessingContext()
+            processingContext.setExpressionContext(self.createExpressionContext())
+            project = self._enmapbox.project()
+            processingContext.setProject(project)
+            processingContext.setTransformContext(project.transformContext())
+            return processingContext
+
+        def createExpressionContext(self) -> QgsExpressionContext:
+
+            project = self._enmapbox.project()
+            context = QgsExpressionContext()
+            context.appendScope(QgsExpressionContextUtils.globalScope())
+            context.appendScope(QgsExpressionContextUtils.projectScope(project))
+            context.appendScope(project.createExpressionContextScope())
+
+            canvas = self._enmapbox.currentMapCanvas()
+            if isinstance(canvas, QgsMapCanvas):
+                context.appendScope(QgsExpressionContextUtils.mapSettingsScope(canvas.mapSettings()))
+
+            lyr = self._enmapbox.currentLayer()
+            if isinstance(lyr, QgsMapLayer):
+                context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(lyr))
+            return context
+
+        def createWidgetContext(self) -> QgsProcessingParameterWidgetContext:
+
+            wc = QgsProcessingParameterWidgetContext()
+            wc.registerProcessingContextGenerator(self)
+            wc.setProject(self._enmapbox.project())
+            lyr = self._enmapbox.currentLayer()
+            if isinstance(lyr, QgsMapLayer):
+                wc.setActiveLayer(lyr)
+
+            return wc
+
     """Main class that drives the EnMAPBox_GUI and all the magic behind"""
 
     def __init__(self, *args,
                  load_core_apps: bool = True,
                  load_other_apps: bool = True):
         if not EnMAPBox.instance() is None:
-            raise AssertionError('EnMAPBox already started. '
-                                 'Call EnMAPBox.instance() to get a handle to.')
+            raise AssertionError(
+                'EnMAPBox already started. '
+                'Call EnMAPBox.instance() to get a handle to existing EnMAPBox instance.'
+                'If used in unit-tests, ensure that created EnMAP-Box instances'
+                'are closed with enmapbox.close()'
+            )
 
         settings: EnMAPBoxSettings = self.settings()
 
-        splash = EnMAPBoxSplashScreen(parent=None)
+        splash = EnMAPBoxSplashScreen()
+        # splash.finish(self.ui)
         if settings.value(EnMAPBoxSettings.SHOW_SPLASHSCREEN, defaultValue=True, type=bool):
             splash.show()
 
         splash.showMessage('Load UI')
         # QApplication.processEvents()
 
-        QgisInterface.__init__(self)
+        super().__init__()
 
         self.mProject: EnMAPBoxProject = EnMAPBoxProject()
+        self.mProject.sigSelectionChanged.connect(self.updateCurrentLayerActions)
+        self.mContextGenerator = self.ContextGenerator(self)
 
         cmReg = EnMAPBoxContextMenuRegistry.instance()
         if len(cmReg) == 0:
@@ -531,7 +512,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         self.ui.cursorLocationValuePanel.sigLocationRequest.connect(lambda: self.setMapTool(MapTools.CursorLocation))
 
         # Processing Toolbox
-        self.processingToolbox().executeWithGui.connect(self.executeAlgorithm)
+        self.processingToolbox().executeAlgorithm.connect(self.executeAlgorithm)
 
         # load EnMAP-Box applications
         splash.showMessage('Load EnMAPBoxApplications...')
@@ -604,14 +585,14 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             a = QAction('Show missing')
             btn = QToolButton()
             btn.setStyleSheet("background-color: rgba(255, 255, 255, 0); color: black; text-decoration: underline;")
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
             btn.addAction(a)
             btn.setDefaultAction(a)
             btn.triggered.connect(self.showPackageInstaller)
             btn.triggered.connect(btn.deleteLater)
             self.__btn = btn
-            item = QgsMessageBarItem(title, '', btn, Qgis.Warning, 200)
+            item = QgsMessageBarItem(title, '', btn, Qgis.MessageLevel.Warning, 200)
             self.messageBar().pushItem(item)
 
         self.sigMapLayersRemoved.connect(self.syncProjects)
@@ -625,17 +606,17 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         self.onReloadProject()
 
-    def executeAlgorithm(self, alg_id, parent, in_place=False, as_batch=False):
-        if True:
-            context = self.processingContext()
-            if parent is None:
-                parent = self.ui
-            executeAlgorithm(alg_id, parent,
-                             in_place=in_place,
-                             as_batch=as_batch,
-                             iface=self,
-                             context=context,
-                             on_results=self.onProcessingAlgTaskCompleted)
+    def executeAlgorithm(
+        self,
+        alg_id,
+        parent: Optional[QMainWindow] = None,
+        in_place=False,
+        as_batch=False
+    ):
+
+        d = self.showProcessingAlgorithmDialog(alg_id)
+        d.algorithmFinished.connect(self.onProcessingAlgTaskCompleted)
+        d.show()
 
     def createExpressionContext(self) -> QgsExpressionContext:
         """
@@ -644,34 +625,20 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         :return: QgsExpressionContext
         """
-        context = QgsExpressionContext()
-        context.appendScope(QgsExpressionContextUtils.globalScope())
-        context.appendScope(QgsExpressionContextUtils.projectScope(self.project()))
-        context.appendScope(self.project().createExpressionContextScope())
+        return self.mContextGenerator.createExpressionContext()
 
-        canvas = self.currentMapCanvas()
-        if isinstance(canvas, QgsMapCanvas):
-            context.appendScope(QgsExpressionContextUtils.mapSettingsScope(canvas.mapSettings()))
-
-        lyr = self.currentLayer()
-        if isinstance(lyr, QgsMapLayer):
-            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(lyr))
-
-        return context
-
-    def processingToolbox(self) -> ProcessingToolbox:
+    def processingToolbox(self) -> ProcessingToolboxDockWidget:
         return self.ui.processingPanel
+
+    def createWidgetContext(self) -> QgsProcessingParameterWidgetContext:
+        return self.mContextGenerator.createWidgetContext()
 
     def processingContext(self) -> QgsProcessingContext:
         """
         Creates a QgsProcessingContext that considers the current state of the EnMAP-Box GUI
         :return: QgsProcessingContext
         """
-        processingContext = QgsProcessingContext()
-        processingContext.setExpressionContext(self.createExpressionContext())
-        processingContext.setProject(self.project())
-        processingContext.setTransformContext(self.project().transformContext())
-        return processingContext
+        return self.mContextGenerator.processingContext()
 
     def project(self) -> EnMAPBoxProject:
         return self.mProject
@@ -686,7 +653,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         viewer.showMessage(blocking=True)
 
     def addMessageBarTextBoxItem(self, title: str, text: str,
-                                 level: Qgis.MessageLevel = Qgis.Info,
+                                 level: Qgis.MessageLevel = Qgis.MessageLevel.Info,
                                  buttonTitle='Show more',
                                  html=False):
         """
@@ -701,8 +668,8 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         a = QAction(buttonTitle)
         btn = QToolButton()
         btn.setStyleSheet("background-color: rgba(255, 255, 255, 0); color: black; text-decoration: underline;")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         btn.addAction(a)
         btn.setDefaultAction(a)
         btn.triggered.connect(lambda *args, msg=text, tit=title, showHTML=html:
@@ -754,7 +721,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             pass
         elif mode == 1:
             # open attribute table
-            filterMode = settings.enumValue('qgis/attributeTableBehavior', QgsAttributeTableFilterModel.ShowAll)
+            filterMode = settings.enumValue(
+                'qgis/attributeTableBehavior',
+                QgsAttributeTableFilterModel.FilterMode.ShowAll
+            )
             self.showAttributeTable(self.currentLayer(), filterMode=filterMode)
             pass
         elif mode == 2:
@@ -887,7 +857,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         profile_field_name: str = profile_field + '_name'
         if profile_field_name not in sl.fields().names():
             with edit(sl):
-                sl.addAttribute(QgsField(profile_field_name, QMetaType.QString))
+                sl.addAttribute(QgsField(profile_field_name, QMetaType.Type.QString))
             fg.updateFieldNodes()
 
         src_suffix = profile_fields(sl).count() - 1
@@ -898,7 +868,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         node = fg.fieldNode(profile_field_name)
         if isinstance(node, StandardFieldGeneratorNode):
             node.setExpression(profile_name_expression)
-            node.setCheckState(Qt.Checked)
+            node.setCheckState(Qt.CheckState.Checked)
 
         vis = None
 
@@ -997,7 +967,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             self.ui, 'Remove non-EnMAP-Box layers?',
             f'Found {len(unwantedLayerIds)} non-EnMAP-Box layers.\nRemove layers?'
         )
-        if button == QMessageBox.Yes:
+        if button == QMessageBox.StandardButton.Yes:
             QgsProject.instance().removeMapLayers(unwantedLayerIds)
 
     def onOpenPythonConsole(self):
@@ -1050,6 +1020,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         ]
         self.onDataDropped(reversed(layers))
 
+    def onShowOptionsDialog(self):
+        from qgis.utils import iface
+        self.optionsDialog = iface.showOptionsDialog(currentPage=EnMAPBoxSettingsPageWidget.PAGE_NAME)
+
     def disconnectQGISSignals(self):
         try:
             self.disconnect()
@@ -1062,6 +1036,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             pass
         try:
             QgsProject.instance().layersWillBeRemoved.disconnect(self.onLayersWillBeRemoved)
+        except TypeError:
+            pass
+        try:
+            QgsApplication.instance().messageLog().messageReceived.disconnect(self.onLogMessage)
         except TypeError:
             pass
 
@@ -1082,8 +1060,8 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
     def onMapCanvasKeyPressed(self, mapCanvas: MapCanvas, e: QKeyEvent):
 
-        is_ctrl = bool(QApplication.keyboardModifiers() & Qt.ControlModifier)
-        if e.key() == Qt.Key_S and is_ctrl:
+        is_ctrl = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier)
+        if e.key() == Qt.Key.Key_S and is_ctrl:
             # add current profiles (if collected)
             self.spectralProfileSourcePanel().addCurrentProfilesToSpeclib()
 
@@ -1201,12 +1179,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         layer = self.currentLayer()
         isVector = isinstance(layer, QgsVectorLayer)
 
-        hasSelectedFeatures = False
-
-        for lyr in self.dockTreeView().layerTreeModel().mapLayers():
-            if isinstance(lyr, QgsVectorLayer) and lyr.selectedFeatureCount() > 0:
-                hasSelectedFeatures = True
-                break
+        hasSelectedFeatures = isVector and layer.selectedFeatureCount() > 0
 
         self.ui.mActionDeselectFeatures.setEnabled(hasSelectedFeatures)
         self.ui.mActionSelectFeatures.setEnabled(isVector)
@@ -1215,11 +1188,11 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         self.ui.mActionAddFeature.setEnabled(isVector and layer.isEditable())
 
         if isVector:
-            if layer.geometryType() == QgsWkbTypes.PointGeometry:
+            if layer.geometryType() == QgsWkbTypes.GeometryType.PointGeometry:
                 icon = QIcon(':/images/themes/default/mActionCapturePoint.svg')
-            elif layer.geometryType() == QgsWkbTypes.LineGeometry:
+            elif layer.geometryType() == QgsWkbTypes.GeometryType.LineGeometry:
                 icon = QIcon(':/images/themes/default/mActionCaptureLine.svg')
-            elif layer.geometryType() == QgsWkbTypes.PolygonGeometry:
+            elif layer.geometryType() == QgsWkbTypes.GeometryType.PolygonGeometry:
                 icon = QIcon(':/images/themes/default/mActionCapturePolygon.svg')
             else:
                 icon = QIcon(':/images/themes/default/mActionCapturePolygon.svg')
@@ -1289,18 +1262,18 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         import enmapbox.gui.dataviews.dockmanager
 
-        area = Qt.LeftDockWidgetArea
+        area = Qt.DockWidgetArea.LeftDockWidgetArea
         self.ui.dataSourcePanel = self.addPanel(area,
                                                 enmapbox.gui.datasources.manager.DataSourceManagerPanelUI(self.ui))
         self.ui.dockPanel = self.addPanel(area, enmapbox.gui.dataviews.dockmanager.DockPanelUI(self.ui))
 
-        area = Qt.RightDockWidgetArea
+        area = Qt.DockWidgetArea.RightDockWidgetArea
 
         self.ui.cursorLocationValuePanel = self.addPanel(area, CursorLocationInfoDock(self.ui), show=False)
         self.ui.cursorLocationValuePanel.mLocationInfoModel.setCountFromZero(False)
 
         self.ui.spectralProfileSourcePanel: SpectralProfileSourcePanel = \
-            self.addPanel(area, SpectralProfileSourcePanel(self.ui), False)
+            self.addPanel(area, SpectralProfileSourcePanel(self.ui, project=self.project()), False)
 
         sources = [
             MapCanvasLayerProfileSource(mode=MapCanvasLayerProfileSource.MODE_FIRST_LAYER),
@@ -1312,13 +1285,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         self.ui.spectralProfileSourcePanel.spectralProfileBridge().setProject(self.project())
         self.sigMapCanvasKeyPressed.connect(self.onMapCanvasKeyPressed)
 
-        import processing.gui.ProcessingToolbox
-        if processing.gui.ProcessingToolbox.iface is None:
-            processing.gui.ProcessingToolbox.iface = qgis.utils.iface
-        self.ui.processingPanel = self.addPanel(area, ProcessingToolbox(), False)
+        self.ui.processingPanel = self.addPanel(area, ProcessingToolboxDockWidget(), False)
 
         self.ui.resizeDocks([self.ui.dataSourcePanel, self.ui.dockPanel, self.ui.spectralProfileSourcePanel],
-                            [40, 50, 10], Qt.Vertical)
+                            [40, 50, 10], Qt.Orientation.Vertical)
 
     def addApplication(self, app):
         """
@@ -1383,14 +1353,17 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         d.setDefaultRoot(defaultRoot)
         result = d.exec()
 
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             subdatasets = d.selectedSublayerDetails()
             layers = []
             loptions = QgsRasterLayer.LayerOptions(loadDefaultStyle=False)
             for i, s in enumerate(subdatasets):
-                path = pathlib.Path(s)
-                name = f'{path.parent.name}/{path.name}'
-                lyr = QgsRasterLayer(s, name=name, options=loptions)
+                if isinstance(s, str):
+                    path = Path(s)
+                    name = f'{path.parent.name}/{path.name}'
+                    lyr = QgsRasterLayer(s, name=name, options=loptions)
+                elif isinstance(s, QgsProviderSublayerDetails):
+                    lyr = QgsRasterLayer(s.uri(), name=s.name(), options=loptions)
                 if i == 0:
                     paths = d.fileWidget.splitFilePaths(d.fileWidget.filePath())
                     SETTINGS.setValue('lastsourcedir', os.path.dirname(paths[0]))
@@ -1472,7 +1445,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         self.ui.mActionToggleEditing.toggled.connect(onEditingToggled)
 
-        m = QMenu()
+        m = QMenu(parent=self.ui)
         m.addAction(self.ui.optionSelectFeaturesRectangle)
         m.addAction(self.ui.optionSelectFeaturesPolygon)
         m.addAction(self.ui.optionSelectFeaturesFreehand)
@@ -1512,6 +1485,8 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         self.ui.mActionShowPackageInstaller.triggered.connect(self.showPackageInstaller)
 
+        self.ui.mActionShowOptions.triggered.connect(self.onShowOptionsDialog)
+
         # finally, fix the popup mode of menus
         for toolBar in self.ui.findChildren(QToolBar):
             toolBar: QToolBar
@@ -1519,7 +1494,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
                 toolButton: QToolButton
                 if isinstance(toolButton.defaultAction(), QAction) and isinstance(toolButton.defaultAction().menu(),
                                                                                   QMenu):
-                    toolButton.setPopupMode(QToolButton.MenuButtonPopup)
+                    toolButton.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
 
             # add toolbar to menu
             if len(toolBar.windowTitle()) > 0:
@@ -1537,7 +1512,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         if layertype == 'speclib':
 
             d = CreateSpectralLibraryDialog(self.ui)
-            if d.exec() == QDialog.Accepted:
+            if d.exec() == QDialog.DialogCode.Accepted:
                 sl = d.create_speclib()
                 if isinstance(sl, QgsVectorLayer):
                     self.project().addMapLayer(sl, False)
@@ -1547,7 +1522,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             d = QgsNewGeoPackageLayerDialog(self.ui)
             d.setCrs(defaultCrs)
             d.setAddToProject(False)
-            if d.exec() == QDialog.Accepted:
+            if d.exec() == QDialog.DialogCode.Accepted:
                 layers.append(QgsVectorLayer(d.databasePath()))
 
         elif layertype == 'memory':
@@ -1586,6 +1561,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             ImportEnmapL1BAlgorithm(),
             ImportEnmapL1CAlgorithm(),
             ImportEnmapL2AAlgorithm(),
+            ImportIperliteL1CAlgorithm(),
             ImportLandsatL2Algorithm(),
             ImportPlanetScopeAlgorithm(),
             ImportPrismaL1Algorithm(),
@@ -1635,6 +1611,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
                     self.ui.mActionSelectFeatures.setToolTip(a.toolTip())
                 ca.setChecked(ca == a)
         self.setMapTool(MapTools.SelectFeature)
+        self.updateCurrentLayerActions()
 
     def deselectFeatures(self):
         """
@@ -1737,7 +1714,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
             if len(self.docks()) == 1:
                 # dirty hack for #488 (zoom to full extent does not work if map dock is the first of all docks)
-                QApplication.processEvents(QEventLoop.ExcludeUserInputEvents | QEventLoop.ExcludeSocketNotifiers)
+                QApplication.processEvents(
+                    QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                    | QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers  # noqa: W503
+                )
                 # QTimer.singleShot(1000, lambda *args, mc=dock.mapCanvas(): mc.zoomToFullExtent())
 
         if isinstance(dock, AttributeTableDock):
@@ -1916,7 +1896,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         """
         listingBasename = 'enmapboxapplications.txt'
 
-        DIR_ENMAPBOX = pathlib.Path(enmapbox.DIR_ENMAPBOX)
+        DIR_ENMAPBOX = Path(enmapbox.DIR_ENMAPBOX)
         INTERNAL_APPS = DIR_ENMAPBOX / 'coreapps'
         EO4Q_APPS = DIR_ENMAPBOX / 'eo4qapps'
         EXTERNAL_APPS = DIR_ENMAPBOX / 'apps'
@@ -1998,10 +1978,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
             info = '\n'.join(info)
             if n_errors_to_show > 0:
-                self.addMessageBarTextBoxItem(title, info, level=Qgis.Warning, html=True)
+                self.addMessageBarTextBoxItem(title, info, level=Qgis.MessageLevel.Warning, html=True)
             else:
                 QgsApplication.instance().messageLog().logMessage(info, 'EnMAP-Box',
-                                                                  level=Qgis.Warning,
+                                                                  level=Qgis.MessageLevel.Warning,
                                                                   notifyUser=False)
 
         settings.setValue(KEY_COUNTS, counts)
@@ -2024,12 +2004,19 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         :return:
         :rtype:
         """
-        msgLines = message.split('\n')
-        if '' in message.split('\n'):
-            msgLines = msgLines[0:msgLines.index('')]
+        if not isinstance(message, str):
+            message = str(message)
 
         # use only messages relevant to "EnMAP-Box"
-        if not re.search(r'enmap-?box', tag, re.I):
+        if not isinstance(tag, str) or not re.search(r'enmap-?box', tag, re.I):
+            return
+
+        msgLines = message.split('\n')
+        if '' in msgLines:
+            msgLines = msgLines[0:msgLines.index('')]
+
+        if len(msgLines) == 0:
+            # nothing to show, e.g. in case of an empty message
             return
 
         # mbar: QgsMessageBar = self.ui.messageBar
@@ -2077,7 +2064,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         if not missingTestData():
             import enmapbox.exampledata
             dir_exampledata = os.path.dirname(enmapbox.exampledata.__file__)
-            files = list(pathlib.Path(f).as_posix() for f in file_search(dir_exampledata, rx, recursive=True))
+            files = list(Path(f).as_posix() for f in file_search(dir_exampledata, rx, recursive=True))
 
             exampleSources = self.addSources(files)
             exampleSources = [s for s in exampleSources if isinstance(s, SpatialDataSource)]
@@ -2104,9 +2091,9 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
                     if isinstance(lyr, QgsVectorLayer):
                         gt = lyr.geometryType()
-                        if gt == QgsWkbTypes.LineGeometry:
+                        if gt == QgsWkbTypes.GeometryType.LineGeometry:
                             oType = 1
-                        elif gt == QgsWkbTypes.PolygonGeometry:
+                        elif gt == QgsWkbTypes.GeometryType.PolygonGeometry:
                             oType = 2
                         else:
                             oType = 0
@@ -2134,10 +2121,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
         if testData:
             from enmapbox import DIR_REPO
-            dir_testdata = pathlib.Path(DIR_REPO) / 'tests' / 'testdata'
+            dir_testdata = Path(DIR_REPO) / 'tests' / 'testdata'
 
             if dir_testdata.is_dir():
-                files = list(pathlib.Path(f).as_posix() for f in file_search(dir_testdata, rx, recursive=True))
+                files = list(Path(f).as_posix() for f in file_search(dir_testdata, rx, recursive=True))
                 self.addSources(files)
 
     def onDataSourcesRemoved(self, dataSources: List[DataSource]):
@@ -2460,7 +2447,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         newSize = QSize(int(f * rect.width()), int(f * rect.height()))
 
         geom = QStyle.alignedRect(
-            Qt.LeftToRight, Qt.AlignCenter,
+            Qt.LayoutDirection.LeftToRight, Qt.AlignmentFlag.AlignCenter,
             newSize, QApplication.primaryScreen().availableGeometry()
         )
         self.ui.setGeometry(geom)
@@ -2474,7 +2461,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
             self.spectralProfileSourcePanel().mBridge.removeAllSources()
             self.project().removeAllMapLayers()
         except Exception as ex:
-            messageLog(str(ex), Qgis.Critical)
+            messageLog(str(ex), Qgis.MessageLevel.Critical)
 
         # de-refer the EnMAP-Box Singleton
 
@@ -2518,7 +2505,6 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
     initializationCompleted = pyqtSignal()
     layerSavedAs = pyqtSignal(QgsMapLayer, str)
-    currentLayerChanged = pyqtSignal(QgsMapLayer)
 
     def actionAddSubDatasets(self) -> QAction:
         return self.ui.mActionAddSubDatasets
@@ -2545,12 +2531,12 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
     def actionAddPgLayer(self):
         return self.ui.mActionAddDataSource
 
-    def addProject(self, project: str):
+    def addProject(self, project: str | Path | QgsProject):
         # 1- clear everything
         # restore
         if isinstance(project, str):
-            self.addProject(pathlib.Path(project))
-        elif isinstance(project, pathlib.Path) and project.is_file():
+            self.addProject(Path(project))
+        elif isinstance(project, Path) and project.is_file():
             p = QgsProject()
             p.read(project.as_posix())
             self.addProject(p)
@@ -2577,8 +2563,8 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
 
     def openProject(self, project):
         if isinstance(project, str):
-            project = pathlib.Path(project)
-        if isinstance(project, pathlib.Path):
+            project = Path(project)
+        if isinstance(project, Path):
             p = QgsProject()
             p.read(project.as_posix())
             self.openProject(project)
@@ -2606,24 +2592,29 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
     def actionZoomOut(self):
         return self.ui.mActionZoomOut
 
-    def showProcessingAlgorithmDialog(self,
-                                      algorithmName: Union[str, QgsProcessingAlgorithm],
-                                      parameters: Dict = None,
-                                      show: bool = True,
-                                      modal: bool = False, wrapper: type = None,
-                                      autoRun: bool = False,
-                                      parent: QWidget = None
-                                      ) -> AlgorithmDialog:
+    def showProcessingAlgorithmDialog(
+        self,
+        algorithm: Union[str, QgsProcessingAlgorithm],
+        parameters: Dict | None = None,
+        show: bool = True,
+        modal: bool = False,
+        wrapper: QgsProcessingAlgorithmWidgetBase | None = None,
+        auto_run: bool = False,
+        parent: QMainWindow | None = None
+    ) -> AlgorithmWidget:
         """
-        Create an algorithm dialog that uses the EnMAP-Box to set the context in which
-        processing algorithms are executed.
+        Creates an algorithm dialog that uses the EnMAP-Box to set the context in which
+        processing algorithms are executed AlgorithmWidget
 
-        Optionally, provide a wrapper class to get full control over individual components like the feedback or results.
+        Caller is responsible to keep a reference on the returned
+
+        Optionally, provides a wrapper class to get full control over individual components
+        like the feedback or results.
         E.g. to get a handle on the results do something like that:
 
         .. code-block:: python
 
-            class Wrapper(AlgorithmDialog):
+            class Wrapper(AlgorithmWidget):
                 def finish(self, successful, result, context, feedback, in_place=False):
                     super().finish(successful, result, context, feedback, in_place=False)
                     if successful:
@@ -2632,59 +2623,58 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         """
 
         if parent is None:
-            from enmapbox.gui.enmapboxgui import EnMAPBox
-            if EnMAPBox.instance() is not None:
-                parent = EnMAPBox.instance().ui
+            parent = EnMAPBox.instance().ui
 
-        if parent is None:
-            from qgis.utils import iface
-            if iface is not None:
-                parent = iface.mapCanvas()
+        if not isinstance(parent, QMainWindow):
+            raise ValueError(f'parent is not a QMainWindow: {parent}')
 
-        if parent is None:
-            raise ValueError()
-
-        algorithm = None
-        all_names = []
-        for alg in QgsApplication.processingRegistry().algorithms():
-            alg: QgsProcessingAlgorithm
-            all_names.append(alg.id())
-            if isinstance(algorithmName, QgsProcessingAlgorithm):
-                algorithmId = algorithmName.id()
-            elif isinstance(algorithmName, str):
-                algorithmId = algorithmName
+        if isinstance(algorithm, str):
+            a = QgsApplication.processingRegistry().createAlgorithmById(algorithm)
+            if a is None:
+                for alg in QgsApplication.processingRegistry().algorithms():
+                    if alg.id().endswith(algorithm):
+                        a = alg
+                        break
+            if isinstance(a, QgsProcessingAlgorithm):
+                algorithm = a
             else:
-                raise ValueError(algorithmName)
-
-            algId = alg.id().split(':')[1]  # remove provider prefix
-            if algorithmId == alg.id() or algorithmId == algId:
-                algorithm = alg
-                break
+                raise QgsProcessingException(f'Algorithm {algorithm} not found in QGIS Processing Registry')
 
         if not isinstance(algorithm, QgsProcessingAlgorithm):
-            raise Exception('Algorithm {} not found in QGIS Processing Registry'.format(algorithmName))
+            raise QgsProcessingException(f'Not a QgsProcessingAlgorithm: {algorithm}')
 
         dlg = algorithm.createCustomParametersWidget(parent)
         if not dlg:
-            context = self.processingContext()
+            processing_context = self.processingContext()
+            widget_context = self.createWidgetContext()
             if wrapper is None:
-                dlg = AlgorithmDialog(algorithm.create(), parent=parent, context=context, iface=self)
+                dlg = AlgorithmWidget(
+                    algorithm,
+                    parent=parent,
+                    processing_context=processing_context,
+                    widget_context=widget_context
+                )
             else:
-                dlg = wrapper(algorithm.create(), parent=parent, context=context, iface=self)
+                dlg = wrapper(
+                    algorithm,
+                    parent=parent,
+                    processing_context=processing_context,
+                    widget_context=widget_context
+                )
         else:
             # assert wrapper is None
             pass
 
-        if not isinstance(dlg, QgsProcessingAlgorithmDialogBase):
-            raise AssertionError('Failed to create QgsProcessingAlgorithmDialogBase')
+        if not isinstance(dlg, QgsProcessingAlgorithmWidgetBase):
+            raise AssertionError('Failed to create QgsProcessingAlgorithmWidgetBase')
 
-        dlg.setModal(modal)
+        # dlg.setModal(modal)
 
         if parameters is not None:
             dlg.setParameters(parameters)
 
         # auto-running the algorithm is useful, if all required parameters are filled in
-        if autoRun:
+        if auto_run:
             dlg.runButton().animateClick(500)
 
         if show and not modal:
@@ -2771,10 +2761,10 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
     def addDockWidget(self, area, dockwidget: QDockWidget, orientation=None):
 
         self.ui.addDockWidget(area, dockwidget)
-        self.ui.setCorner(Qt.TopLeftCorner, Qt.LeftDockWidgetArea)
-        self.ui.setCorner(Qt.BottomLeftCorner, Qt.LeftDockWidgetArea)
-        self.ui.setCorner(Qt.TopRightCorner, Qt.RightDockWidgetArea)
-        self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
+        self.ui.setCorner(Qt.Corner.TopLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.ui.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.ui.setCorner(Qt.Corner.TopRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
+        self.ui.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
 
         self.ui.menuPanels.addAction(dockwidget.toggleViewAction())
 
@@ -2964,6 +2954,7 @@ class EnMAPBox(QgisInterface, QObject, QgsExpressionContextGenerator, QgsProcess
         :return: bool. True, if mapLayer exists, False otherwise.
         """
         self.dockTreeView().setCurrentLayer(mapLayer)
+        self.updateCurrentLayerActions()
         return isinstance(mapLayer, QgsMapLayer)
 
     def currentLayer(self) -> QgsMapLayer:

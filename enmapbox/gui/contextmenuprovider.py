@@ -12,9 +12,12 @@ from enmapbox.gui.datasources.datasources import DataSource, RasterDataSource, V
 from enmapbox.gui.datasources.datasourcesets import DataSourceSet
 from enmapbox.gui.datasources.manager import DataSourceManager, DataSourceManagerTreeView
 from enmapbox.gui.datasources.metadata import RasterBandTreeNode
+from enmapbox.gui.dataviews.attributetabledock import AttributeTableDock
 from enmapbox.gui.dataviews.dockmanager import DockTreeNode, MapDockTreeNode, DockManagerLayerTreeModelMenuProvider, \
     DockTreeView, LayerTreeNode, SpeclibProfileVisualizationGroupNode
-from enmapbox.gui.dataviews.docks import Dock, MapDock, AttributeTableDock, SpectralLibraryDock
+from enmapbox.gui.dataviews.docks import Dock
+from enmapbox.gui.dataviews.mapdock import MapDock
+from enmapbox.gui.dataviews.spectrallibrarydock import SpectralLibraryDock
 from enmapbox.gui.mapcanvas import MapCanvas, CanvasLink
 from enmapbox.qgispluginsupport.qps.crosshair.crosshair import CrosshairDialog
 from enmapbox.qgispluginsupport.qps.layerproperties import showLayerPropertiesDialog
@@ -123,14 +126,15 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
         mPxGrid.addSeparator()
         wa = QWidgetAction(mPxGrid)
 
-        model = QgsMapLayerProxyModel()
-        model.setFilters(QgsMapLayerProxyModel.RasterLayer)
-        model.setProject(mapCanvas.project())
+        project = mapCanvas.project()
+        model = QgsMapLayerProxyModel(project)
+        model.setFilters(QgsMapLayerProxyModel.Filter.RasterLayer)
+        model.setProject(project)
 
         cb = QComboBox()
 
         def onIndexChanged(i: int):
-            lid = cb.itemData(i, role=Qt.UserRole)
+            lid = cb.itemData(i, role=Qt.ItemDataRole.UserRole)
             if isinstance(lid, str):
                 lyr = mapCanvas.project().mapLayer(lid)
                 if isinstance(lyr, QgsRasterLayer):
@@ -144,8 +148,8 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
 
         for i in range(model.rowCount()):
             idx = model.index(i, 0)
-            lid = model.data(idx, role=Qt.UserRole + 1)
-            name = model.data(idx, role=Qt.DisplayRole)
+            lid = model.data(idx, role=Qt.ItemDataRole.UserRole + 1)
+            name = model.data(idx, role=Qt.ItemDataRole.DisplayRole)
             if lid is None:
                 continue
 
@@ -154,16 +158,16 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
             else:
                 name = str(name)
 
-            icon = model.data(idx, role=Qt.DecorationRole)
-            tt = model.data(idx, role=Qt.ToolTipRole)
+            icon = model.data(idx, role=Qt.ItemDataRole.DecorationRole)
+            tt = model.data(idx, role=Qt.ItemDataRole.ToolTipRole)
             if lid not in tt:
                 tt += f'<br>ID:<i>{lid}</i>'
             cb.addItem(name)
             j = cb.count() - 1
-            cb.setItemData(j, lid, Qt.UserRole)
-            cb.setItemData(j, tt, Qt.ToolTipRole)
-            cb.setItemData(j, lid, Qt.UserRole)
-            cb.setItemData(j, icon, Qt.DecorationRole)
+            cb.setItemData(j, lid, Qt.ItemDataRole.UserRole)
+            cb.setItemData(j, tt, Qt.ItemDataRole.ToolTipRole)
+            cb.setItemData(j, lid, Qt.ItemDataRole.UserRole)
+            cb.setItemData(j, icon, Qt.ItemDataRole.DecorationRole)
 
             if lid == clid:
                 cb.setCurrentIndex(j)
@@ -379,7 +383,7 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
                 a.setIcon(QIcon(':/images/themes/default/mActionFileSaveAs.svg'))
                 a.triggered.connect(
                     lambda src: EnMAPBox.instance().showProcessingAlgorithmDialog(
-                        TranslateRasterAlgorithm(), parameters, parent=treeView
+                        TranslateRasterAlgorithm(), parameters
                     )
                 )
 
@@ -388,7 +392,7 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
                 a.setIcon(QIcon(':/images/themes/default/mActionFileSaveAs.svg'))
                 a.triggered.connect(
                     lambda src: EnMAPBox.instance().showProcessingAlgorithmDialog(
-                        SubsetRasterBandsAlgorithm(), parameters, parent=treeView
+                        SubsetRasterBandsAlgorithm(), parameters
                     )
                 )
 
@@ -398,13 +402,16 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
                     a.setIcon(QIcon(':/images/themes/default/mActionFileSaveAs.svg'))
                     a.triggered.connect(
                         lambda src: EnMAPBox.instance().showProcessingAlgorithmDialog(
-                            WriteEnviHeaderAlgorithm(), parameters, parent=treeView
+                            WriteEnviHeaderAlgorithm(), parameters
                         )
                     )
 
             elif isinstance(node, VectorDataSource):
 
-                if node.geometryType() not in [QgsWkbTypes.NullGeometry, QgsWkbTypes.UnknownGeometry]:
+                if node.geometryType() not in [
+                    QgsWkbTypes.GeometryType.NullGeometry,
+                    QgsWkbTypes.GeometryType.UnknownGeometry
+                ]:
                     a = menu.addAction('Open in new map')
                     a.triggered.connect(lambda *args, s=node: treeView.openInMap(s, None))
 
@@ -525,11 +532,14 @@ class EnMAPBoxContextMenuProvider(EnMAPBoxAbstractContextMenuProvider):
 
         if isinstance(node, (DockTreeNode, QgsLayerTreeLayer, QgsLayerTreeGroup)):
             actionEdit = menu.addAction('Rename')
-            actionEdit.setShortcut(Qt.Key_F2)
+            actionEdit.setShortcut(Qt.Key.Key_F2)
             actionEdit.triggered.connect(lambda *args, idx=cidx: view.edit(idx))
 
-        if isinstance(node, MapDockTreeNode) or isinstance(viewNode, MapDockTreeNode) \
-                and isinstance(node, (QgsLayerTreeGroup, QgsLayerTreeLayer)):
+        if (
+            isinstance(node, MapDockTreeNode)
+            or isinstance(viewNode, MapDockTreeNode)  # noqa: W503
+            and isinstance(node, (QgsLayerTreeGroup, QgsLayerTreeLayer))  # noqa: W503
+        ):
             action = menu.addAction('Add Group')
             action.setIcon(QIcon(':/images/themes/default/mActionAddGroup.svg'))
             action.triggered.connect(lambda tv=view: self.onAddGroup(view))

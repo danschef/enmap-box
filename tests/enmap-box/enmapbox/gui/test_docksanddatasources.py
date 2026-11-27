@@ -12,34 +12,28 @@ __author__ = 'benjamin.jakimow@geo.hu-berlin.de'
 __date__ = '2017-07-17'
 __copyright__ = 'Copyright 2017, Benjamin Jakimow'
 
+import importlib
 import os
-import tempfile
 import unittest
 
-from pyqtgraph.dockarea.Dock import Dock as pgDock
+from qgis.PyQt.QtWidgets import QApplication
+from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
 
 from enmapbox import initEnMAPBoxResources
-from enmapbox.exampledata import landcover_polygon, enmap, hires
+from enmapbox.exampledata import landcover_polygon, enmap
 from enmapbox.gui.datasources.datasources import VectorDataSource, RasterDataSource
 from enmapbox.gui.datasources.manager import DataSourceManager
 from enmapbox.gui.dataviews.dockmanager import (
-    DockManager, SpeclibDockTreeNode, MapDockTreeNode, DockTreeView, DockManagerTreeModel, createDockTreeNode,
-    DockTreeNode
+    DockTreeView, DockTreeNode
 )
-from enmapbox.gui.dataviews.docks import (
-    MapDock, DockArea, MimeDataDock, TextDock, SpectralLibraryDock, TextDockWidget, Dock
-)
+from enmapbox.gui.dataviews.docks import Dock
+from enmapbox.gui.dataviews.mapdock import MapDock
+from enmapbox.gui.dataviews.webviewdock import WebViewDock
 from enmapbox.gui.enmapboxgui import EnMAPBox
 from enmapbox.qgispluginsupport.qps.maptools import MapTools
-from enmapbox.qgispluginsupport.qps.speclib.core import is_spectral_library
 from enmapbox.qgispluginsupport.qps.speclib.gui.spectrallibrarywidget import SpectralLibraryWidget
 from enmapbox.qgispluginsupport.qps.utils import SpatialPoint
 from enmapbox.testing import EnMAPBoxTestCase, TestObjects, start_app
-from enmapboxtestdata import classificationDatasetAsSkopsFile, library_berlin
-from qgis.PyQt.QtWidgets import QApplication
-from qgis.PyQt.QtWidgets import QWidget, QHBoxLayout
-from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer, QgsLayerTreeModel, QgsLayerTree
-from qgis.gui import QgsMapCanvas, QgsLayerTreeView
 
 start_app()
 initEnMAPBoxResources()
@@ -65,7 +59,7 @@ class TestDocksAndDataSources(EnMAPBoxTestCase):
         DSM = DataSourceManager()
         self.assertIsInstance(DSM, DataSourceManager)
         DSM.sigDataSourcesAdded.connect(onSignal)
-
+        from enmapboxtestdata import library_berlin
         DSM.addDataSources(enmap)
         DSM.addDataSources(landcover_polygon)
         DSM.addDataSources(library_berlin)
@@ -144,223 +138,49 @@ class TestDocksAndDataSources(EnMAPBoxTestCase):
 
         self.showGui(eb.ui)
 
-    def test_SpeclibDockNodes(self):
-
-        TV = DockTreeView(None)
-        dsm = DataSourceManager()
-        dm = DockManager()
-        dm.connectDataSourceManager(dsm)
-        dockArea = DockArea()
-        dm.connectDockArea(dockArea)
-        dm.connectDataSourceManager(dsm)
-        model = DockManagerTreeModel(dm)
-        TV.setModel(model)
-        self.assertIsInstance(TV, QgsLayerTreeView)
-        speclibDock: SpectralLibraryDock = dm.createDock(SpectralLibraryDock)
-
-        model.findDockNode(speclibDock)
-        model.findDockNode(speclibDock.speclibWidget())
-
-        w = QWidget()
-        layout = QHBoxLayout()
-        layout.addWidget(TV)
-        layout.addWidget(dockArea)
-        w.setLayout(layout)
-        self.showGui(w)
-        QgsProject.instance().removeAllMapLayers()
-
     def test_ActionNode(self):
 
         TV = DockTreeView(None)
 
         self.showGui(TV)
 
-    def test_canvasBridge(self):
-        project = QgsProject()
-        lyr1 = TestObjects.createVectorLayer()
-        lyr1.setName('Layer 1')
-        lyr2 = TestObjects.createVectorLayer()
-        lyr2.setName('Layer 2')
-        layers = [lyr1, lyr2]
-        project.addMapLayers(layers)
-        widgets = []
-        if False:
-            treeRoot = QgsLayerTree()
-            model = QgsLayerTreeModel(treeRoot)
-            model.setFlag(QgsLayerTreeModel.AllowNodeReorder, True)
-            model.setFlag(QgsLayerTreeModel.AllowNodeRename, True)
-            model.setFlag(QgsLayerTreeModel.AllowNodeChangeVisibility, True)
-            model.setFlag(QgsLayerTreeModel.AllowLegendChangeState, True)
-            model.setAutoCollapseLegendNodes(0)
+    has_QtWebEngineWidgets = importlib.util.find_spec('qgis.PyQt.QtWebEngineWidgets') is not None
+    runs_offscreen = os.environ.get('QT_QPA_PLATFORM', '').lower() in ['offscreen']
 
-            tree1 = QgsLayerTree()
-            tree1.setName('Tree1')
-            tree2 = QgsLayerTree()
-            tree2.setName('Tree2')
-            model.rootGroup().insertChildNodes(0, [tree1, tree2])
-        else:
-            manager = DockManager()
-            dockArea = DockArea()
-            manager.connectDockArea(dockArea)
-
-            model = DockManagerTreeModel(manager)
-            model.setProject(project)
-            dock1 = manager.createDock('MAP', name='Tree1')
-            dock2 = manager.createDock('MAP', name='Tree2')
-            widgets.extend([dock1, dock2])
-        root = model.rootGroup().children()[0]
-        QgsMapCanvas()
-        # bridge = QgsLayerTreeMapCanvasBridge(root, canvas)
-
-        # view = QgsLayerTreeView()
-        view = DockTreeView()
-        view.setDragEnabled(True)
-        view.setAcceptDrops(True)
-        view.setModel(model)
-        for lyr in layers:
-            root.addLayer(lyr)
-        widgets.insert(0, view)
-        self.showGui(widgets)
-
-        del view, model, manager, root
-
-        project.removeAllMapLayers()
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_pgDock(self):
-
-        da = DockArea()
-
-        dock = pgDock('Test')
-        da.addDock(dock)
-        da.show()
-        self.showGui(da)
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_MimeDataDock(self):
-        da = DockArea()
-        dock = MimeDataDock()
-        da.addDock(dock)
-        self.showGui(da)
-
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_TextDock(self):
-        da = DockArea()
-        dock = TextDock()
-        self.assertIsInstance(dock, TextDock)
-        tw = dock.textDockWidget()
-        self.assertIsInstance(tw, TextDockWidget)
-
-        testText = """
-        foo
-        bar
+    @unittest.skipIf(runs_offscreen, 'QT_QPA_PLATFORM=offscreen. QWebEngineView requires a screen device')
+    @unittest.skipIf(not has_QtWebEngineWidgets, 'qgis.PyQt.QtWebEngineWidgets not available')
+    def test_WebViewDock(self):
+        html = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Home page</title>
+        </head>
+        <body>
+            <p>
+                This is a simple HTML page.
+            </p>
+        </body>
+        </html>
         """
-        tw.setText(testText)
-        self.assertEqual(testText, tw.text())
-        pathTxt = os.path.join(tempfile.gettempdir(), 'testfile.txt')
-        tw.mFile = pathTxt
-        tw.save()
 
-        with open(pathTxt, encoding='utf-8') as f:
-            checkTxt = f.read()
-        self.assertEqual(checkTxt, testText)
-        tw.mFile = None
+        # from qgis.PyQt.QtWebEngineWidgets import QWebEngineView
+        # view = QWebEngineView()
+        # view.setWindowTitle('Test')
 
-        tw.setText('')
-        self.assertEqual(tw.text(), '')
-        tw.loadFile(pathTxt)
-        self.assertEqual(checkTxt, tw.text())
+        # view.setHtml(html)
+        # self.showGui(view)
 
-        da.addDock(dock)
-        da.show()
-        self.showGui(da)
-
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_SpeclibDock(self):
-
-        # w = SpectralLibraryWidget()
-        # self.showGui(w)
-        da = DockArea()
-        dock = SpectralLibraryDock()
-
-        # self.assertTrue(is_spectral_library(dock.speclib()))
+        dock = WebViewDock()
+        dock.showHtml(html)
         self.showGui(dock)
-        da.addDock(dock)
-        self.assertIsInstance(dock, SpectralLibraryDock)
-        self.showGui(da)
-
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_MapDock(self):
-        da = DockArea()
-        from enmapbox.gui.dataviews.docks import MapDock
-        dock = MapDock()
-        self.assertIsInstance(dock, MapDock)
-        da.addDock(dock)
-        self.showGui(da)
-
-        del da, dock
-
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_SpeclibDockTreeNode(self):
-
-        TestObjects.createSpectralLibrary(name='speclib1')
-        TestObjects.createSpectralLibrary(name='speclib2')
-
-        dock = SpectralLibraryDock()
-        node = createDockTreeNode(dock)
-        self.assertIsInstance(node, SpeclibDockTreeNode)
-        slw = node.speclibWidget()
-        slw.plotModel()
-        self.assertIsInstance(slw, SpectralLibraryWidget)
-
-    def test_MapDockLayerHandling(self):
-
-        EMB = EnMAPBox(load_other_apps=False, load_core_apps=False)
-        self.assertIsInstance(EnMAPBox.instance(), EnMAPBox)
-        self.assertEqual(EMB, EnMAPBox.instance())
-
-        EMB.createNewMapCanvas('Canvas1')
-        canvas2 = EMB.createNewMapCanvas('Canvas2')
-
-        mapNode = EMB.findDockTreeNode(canvas2)
-        self.assertIsInstance(mapNode, MapDockTreeNode)
-        self.assertEqual(mapNode.mapCanvas(), canvas2)
-        lyr = TestObjects.createRasterLayer()
-        mapNode.addLayer(lyr)
-
-        node = EMB.findDockTreeNode(lyr)
-        self.assertIsInstance(node, MapDockTreeNode)
-        self.assertTrue(lyr.id() in node.findLayerIds())
-
-        speclib1 = EMB.createNewSpectralLibrary('Speclib 1')
-        self.assertIsInstance(speclib1, QgsVectorLayer)
-        self.assertTrue(is_spectral_library(speclib1))
-
-        mapNode.addLayer(speclib1)
-        node = EMB.findDockTreeNode(speclib1)
-        self.assertTrue(node, SpeclibDockTreeNode)
-
-        EMB.close()
-        QgsProject.instance().removeAllMapLayers()
-
-    def test_issue_881(self):
-        enmapBox = EnMAPBox(load_core_apps=False, load_other_apps=False)
-        dock: MapDock = enmapBox.onDataDropped([QgsRasterLayer(enmap, 'enmap')])
-        dock.insertLayer(0, QgsRasterLayer(hires, 'hires'))
-
-        self.showGui(enmapBox.ui)
-        enmapBox.close()
-        QApplication.processEvents()
-        QgsProject.instance().removeAllMapLayers()
 
     def test_issue_737(self):
 
         enmapBox = EnMAPBox(load_core_apps=False, load_other_apps=False)
-
+        from enmapboxtestdata import classificationDatasetAsSkopsFile
         enmapBox.addSource(classificationDatasetAsSkopsFile)
         self.showGui(enmapBox.ui)
 
